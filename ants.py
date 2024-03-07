@@ -7,9 +7,15 @@ import pheromone
 import direction as d
 import pygame as pg
 
+# deactivating the numpy paralelism
+import os
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+
 UNLOADED, LOADED = False, True
 
 exploration_coefs = 0.
+
 
 
 class Colony:
@@ -215,51 +221,85 @@ class Colony:
 if __name__ == "__main__":
     import sys
     import time
-    pg.init()
-    size_laby = 25, 25
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+    
+    # All process setup
+    # getting arguments (all processes)
+    size_laby = 50, 50
     if len(sys.argv) > 2:
         size_laby = int(sys.argv[1]),int(sys.argv[2])
-
-    resolution = size_laby[1]*8, size_laby[0]*8
-    screen = pg.display.set_mode(resolution)
-    nb_ants = size_laby[0]*size_laby[1]//4
     max_life = 500
     if len(sys.argv) > 3:
         max_life = int(sys.argv[3])
-    pos_food = size_laby[0]-1, size_laby[1]-1
-    pos_nest = 0, 0
-    a_maze = maze.Maze(size_laby, 12345)
-    ants = Colony(nb_ants, pos_nest, max_life)
-    unloaded_ants = np.array(range(nb_ants))
     alpha = 0.9
     beta  = 0.99
     if len(sys.argv) > 4:
         alpha = float(sys.argv[4])
     if len(sys.argv) > 5:
         beta = float(sys.argv[5])
-    pherom = pheromone.Pheromon(size_laby, pos_food, alpha, beta)
-    mazeImg = a_maze.display()
     food_counter = 0
     
+    nb_ants = size_laby[0]*size_laby[1]//4
+    pos_food = size_laby[0]-1, size_laby[1]-1
+    pos_nest = 0, 0
+    
+    a_maze = maze.Maze(size_laby, 12345)
 
-    snapshop_taken = False
-    while True:
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                pg.quit()
-                exit(0)
+    # Process 0 for display, Process 1 for ant/pheromone management
+    if rank == 0:
+        # Display-related tasks
+        pg.init()
+        # clock = pg.time.Clock()
+        snapshop_taken = False
+        
+        resolution = size_laby[1]*8, size_laby[0]*8
+        screen = pg.display.set_mode(resolution)
+        
+        
+        while True:
+            for event in pg.event.get():
+                if event.type == pg.QUIT:
+                    pg.quit()
+                    exit(0)
+                    
+            deb = time.time()
 
-        deb = time.time()
-        pherom.display(screen)
-        screen.blit(mazeImg, (0, 0))
-        ants.display(screen)
-        pg.display.update()
-                
-        food_counter = ants.advance(a_maze, pos_food, pos_nest, pherom, food_counter)
-        pherom.do_evaporation(pos_food)
-        end = time.time()
-        if food_counter == 1 and not snapshop_taken:
-            pg.image.save(screen, "MyFirstFood.png")
-            snapshop_taken = True
-        # pg.time.wait(500)
-        print(f"FPS : {1./(end-deb):6.2f}, nourriture : {food_counter:7d}", end='\r')
+            # pherom.display(screen)
+            # source: Surface, dest: Coordinate | RectValue, area: RectValue | None = None, special_flags: int = 0) -> Rect
+            
+            received_data = comm.recv(source=1, tag=11)  # Receive data from process 1
+            print(received_data)  # Process and display this data
+            
+            screen.blit(mazeImg, (0, 0))
+            ants.display(screen)
+            pg.display.update()
+            
+            end = time.time()
+            if food_counter == 1 and not snapshop_taken:
+                pg.image.save(screen, "MyFirstFood.png")
+                snapshop_taken = True
+            # pg.time.wait(500)
+            print(f"FPS : {1./(end-deb):6.2f}, nourriture : {food_counter:7d}", end='\r')
+        
+    else:
+        # Ant and pheromone management tasks
+        
+        # need to initialize the different colonies for each process (not implemented yet)
+        ants = Colony(nb_ants, pos_nest, max_life)
+        unloaded_ants = np.array(range(nb_ants))
+        pherom = pheromone.Pheromon(size_laby, pos_food, alpha, beta)
+        
+        while True:
+            food_counter = ants.advance(a_maze, pos_food, pos_nest, pherom, food_counter)
+            pherom.do_evaporation(pos_food)
+            
+            ants_data = {'positions': [[1, 2], [3, 4]], 'directions': [0, 1]}  # Dummy data
+            comm.send(ants_data, dest=0, tag=11)  # Send data to process 0
+            
+            
+            
+
+            # clock.tick(15)  # adjust FPS here

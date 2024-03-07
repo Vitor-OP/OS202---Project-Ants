@@ -89,6 +89,7 @@ if __name__  == "__main__":
     t1 = time.time()
     maze = Maze(dimensions, 12345)
     t2 = time.time()
+    
     print(f"Temps construction labyrinthe : {t2-t1} secondes")
 
     screen.fill((255, 255, 255))
