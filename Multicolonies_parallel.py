@@ -11,6 +11,11 @@ UNLOADED, LOADED = False, True
 
 exploration_coefs = 0.
 
+# deactivating the numpy paralelism
+import os
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+
 
 class Colony:
     """
@@ -42,6 +47,7 @@ class Colony:
         self.directions = d.DIR_NONE*np.ones(nb_ants, dtype=np.int8)
         self.sprites = []
         
+        # prevents the other cores from displaying
         if rank == 0:
             img = pg.image.load("ants.png").convert_alpha()    
             for i in range(0, 32, 8):
@@ -218,6 +224,9 @@ if __name__ == "__main__":
     import sys
     import time
     from mpi4py import MPI 
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import pandas as pd
 
     comm = MPI.COMM_WORLD
     size = comm.Get_size()
@@ -252,7 +261,7 @@ if __name__ == "__main__":
     unloaded_ants = np.array(range(nb_ants_per_process))
 
     a_maze = maze.Maze(size_laby, 12345, rank)
-    pherom = pheromone.Pheromon(size_laby, pos_food, alpha, beta)
+    local_pherom = pheromone.Pheromon(size_laby, pos_food, alpha, beta)
 
     if rank == 0:
         mazeImg = a_maze.display()
@@ -264,11 +273,20 @@ if __name__ == "__main__":
 
     food_counter = 0
 
-    total_iterations = 5000  # Número total de iterações
+    total_iterations = 2000  # Número total de iterações
     iteration_count = 0  # Contador de iterações
     total_time = 0.0  # Tempo total das iterações
+    
+    # for evaluation purposes
+    total_pheromones_i = []
+    total_fps_i = []
+    total_food_i = []
+    total_time_per_iteration_i = []
+    
+    global_pheromon = np.zeros((size_laby[0]+2, size_laby[1]+2), dtype=np.double)
 
     snapshop_taken = False
+    flag = 0
     while iteration_count < total_iterations:
         for event in pg.event.get():
             if event.type == pg.QUIT:
@@ -277,11 +295,17 @@ if __name__ == "__main__":
 
         if rank != 0:
             # Atualiza o food_counter em cada processo
-            food_counter = ants_local.advance(a_maze, pos_food, pos_nest, pherom, pherom.pheromon, food_counter)
-            pherom.do_evaporation(pos_food)
+            comm.Allreduce(local_pherom.pheromon, global_pheromon, op=MPI.MAX)
+                
+            local_pherom.pheromon[:] = global_pheromon[:]
+            
+            # local_pherom.setpheromon(global_pheromon)
+            
+            food_counter = ants_local.advance(a_maze, pos_food, pos_nest, local_pherom, local_pherom.pheromon, food_counter)
+            local_pherom.do_evaporation(pos_food)
 
             # Envia as informações necessárias para o processo 0
-            data_to_send = (ants_local.age, ants_local.historic_path, ants_local.directions, food_counter, pherom.pheromon)
+            data_to_send = (ants_local.age, ants_local.historic_path, ants_local.directions, food_counter)
             comm.send(data_to_send, dest=0)
             
         else:
@@ -289,20 +313,57 @@ if __name__ == "__main__":
             
             food_counter = 0
             
+            blank_pheromon = np.zeros((size_laby[0]+2, size_laby[1]+2), dtype=np.double)
+            
+            # print(local_pherom.pheromon)
+            comm.Allreduce(blank_pheromon, global_pheromon, op=MPI.MAX)
+            # print(local_pherom.pheromon)
+            
+            # local_pherom.setpheromon(global_pheromon)
+            
+            local_pherom.pheromon[:] = global_pheromon[:]
+            
+            # received_data = [None for _ in range(size)]  # Define the "received_data" variable
+            
+            age_process = [None for _ in range(size)]
+            historic_path_process = [None for _ in range(size)]
+            directions_process = [None for _ in range(size)]
+            
+            global_age = np.zeros(0, dtype=np.int64)
+            global_historic_path = np.zeros((0, max_life+1, 2), dtype=np.int16)
+            global_directions = np.zeros(0, dtype=np.int64)
+            
             for i in range(1, size):
                 received_data = comm.recv(source=i)
-                age_process, historic_path_process, directions_process, food_counter_local, pherom.pheromon = received_data
+                age_process[i], historic_path_process[i], directions_process[i], food_counter_local = received_data
+                global_directions = np.concatenate((global_directions, directions_process[i]))
+                global_age = np.concatenate((global_age, age_process[i]))
+                global_historic_path = np.concatenate((global_historic_path, historic_path_process[i]))
                 food_counter += food_counter_local
                 
-            ants_global.age = age_process
-            ants_global.directions = directions_process
-            ants_global.historic_path = historic_path_process
+            if food_counter > 100 and flag == 0:
+                print(f"global n ants: {nb_ants}")
+                print(f"Global pheromones: {global_pheromon.shape}")
+                print(f"Global age: {global_age.shape}")
+                print(f"Global historic path: {global_historic_path.shape}")
+                print(f"Global directions: {global_directions.shape}")
+                flag = 1
+                
+                
+            ants_global.age = global_age
+            ants_global.directions = global_directions
+            ants_global.historic_path = global_historic_path
             
-            pherom.display(screen)
+            local_pherom.display(screen)
             screen.blit(mazeImg, (0, 0))
             ants_global.display(screen)
             pg.display.update()
             end = time.time()
+            
+            total_pheromones_i.append(local_pherom.pheromon.sum())
+            total_fps_i.append(1./(end-deb))
+            total_time_per_iteration_i.append(end-deb)
+            total_food_i.append(food_counter)
 
             fps = 1.0 / (end - deb)
 
@@ -315,3 +376,105 @@ if __name__ == "__main__":
                 snapshop_taken = True
 
             print(f"Iteration {iteration_count}: FPS : {fps:6.2f}, Nourriture : {food_counter:7d}, Total Time: {total_time:6.2f} sec", end='\r')
+    
+    if rank == 0:
+        
+        average_time_per_iteration = sum(total_time_per_iteration_i) / len(total_time_per_iteration_i)
+        total_time = sum(total_time_per_iteration_i)
+        max_time = max(total_time_per_iteration_i)
+        min_time = min(total_time_per_iteration_i)
+        std_dev_time = np.std(total_time_per_iteration_i)
+        
+        # Print the results
+        print(f"Average Time per Iteration: {average_time_per_iteration}")
+        print(f"Total time: {total_time}")
+        print(f"Max Time per Iteration: {max_time}")
+        print(f"Min Time per Iteration: {min_time}")
+        print(f"Standard Deviation of Time per Iteration: {std_dev_time}")
+        
+        # Create a dictionary with the data
+        data = {
+        # "Iterations": list(range(len(total_pheromones_i))),
+        "Total Pheromones": total_pheromones_i,
+        # "FPS": total_fps_i,
+        "Time per Iteration": total_time_per_iteration_i,
+        "Total Food": total_food_i
+        }
+
+        # Create a DataFrame
+        df = pd.DataFrame(data)
+
+        # Specify the filename
+        filename = "simulation_data.xlsx"
+
+        # Save the DataFrame to an Excel file
+        df.to_excel(filename, index=False, engine='openpyxl')
+
+        print(f"Data saved to {filename}.")
+        
+        print(f"Average Time per Iteration: {average_time_per_iteration}")
+        print(f"Total time: {total_time}")
+        print(f"Max Time per Iteration: {max_time}")
+        print(f"Min Time per Iteration: {min_time}")
+        print(f"Standard Deviation of Time per Iteration: {std_dev_time}")
+        
+        # Calculate the derivative
+        food_derivative = np.gradient(total_food_i)
+        # Convert the list to a numpy array
+        food_derivative_np = np.array(food_derivative)
+        
+        # Set a Seaborn style
+        sns.set(style="whitegrid", palette="pastel", font_scale=1.2)
+
+        # Create a figure to hold the subplots, adjust to 3 rows
+        fig, axs = plt.subplots(3, 1, figsize=(10, 18))  # Now 3 rows, 1 column
+
+        # First subplot for Total Pheromones
+        axs[0].plot(total_pheromones_i, linewidth=1, color='deepskyblue', linestyle='-', label='Total Pheromones')
+        # axs[0].set_xlabel('Iteration', fontsize=14)
+        axs[0].set_ylabel('Total Pheromones', fontsize=14)
+        axs[0].set_title('Evaluation of The Sequencial Program', fontsize=16)
+        axs[0].legend(frameon=True, loc='upper left')
+        axs[0].grid(True, which='both', linestyle='--', linewidth=0.5)
+
+        # # Second subplot for FPS
+        # axs[1].plot(total_fps_i, linewidth=1, color='salmon', linestyle='-', label='FPS')
+        # # axs[1].set_xlabel('Frame', fontsize=14)
+        # axs[1].set_ylabel('FPS', fontsize=14)
+        # # axs[1].set_title('FPS Over Time', fontsize=16)
+        # axs[1].axhline(y=average_fps, color='green', linestyle='--', linewidth=1, label='Average FPS')
+        # axs[1].legend(frameon=True, loc='upper left')
+        # axs[1].grid(True, which='both', linestyle='--', linewidth=0.5)
+
+        # Second subplot for time per iteration
+        axs[1].plot(total_time_per_iteration_i, linewidth=1, color='lightcoral', linestyle='-', label='Time per Iteration')
+        # axs[1].set_xlabel('Iteration', fontsize=14)
+        axs[1].set_ylabel('Time per iteration', fontsize=14)
+        # axs[1].set_title('Time per Iteration Over Time', fontsize=16)
+        axs[1].axhline(y=average_time_per_iteration, color='green', linestyle='--', linewidth=1, label='Average FPS')
+        axs[1].legend(frameon=True, loc='upper left')
+        axs[1].grid(True, which='both', linestyle='--', linewidth=0.5)
+
+
+        # Third subplot for Total Food Collected
+        # axs[2].plot(total_food_i, linewidth=1, color='lightgreen', linestyle='-', label='Total Food Collected')
+        axs[2].plot(food_derivative[:-1], linewidth=1, color='orange', linestyle='-', label='Food Derivative')
+        axs[2].set_xlabel('Iteration', fontsize=14)
+        axs[2].set_ylabel('Food Units', fontsize=14)
+        # axs[2].set_title('Total Food Collected Over Time', fontsize=16)
+        # Add a vertical line at the index
+        axs[2].legend(frameon=True, loc='upper left')
+        axs[2].grid(True, which='both', linestyle='--', linewidth=0.5)
+
+        # Adjust layout
+        plt.tight_layout(pad=3.0)
+
+        # Save the figure
+        plt.savefig("combined_plots.png")
+
+        # Show the plot
+        plt.show()
+        
+        
+        pg.quit()
+        exit(0)

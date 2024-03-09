@@ -61,7 +61,7 @@ class Maze:
                 is_visited[cur_ind] = 1
             else:
                 historic.pop()
-        #  Load patterns for maze display :
+        # prevents the other cores from doing display stuff
         if rank==0:
             img = pg.image.load("cases.png").convert_alpha()
             for i in range(0, 128, 8):
