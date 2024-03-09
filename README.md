@@ -1,6 +1,7 @@
 ## Fourmi2024
 
-Ce projet vise à implémenter et à paralléliser un algorithme d'optimisation de colonie de fourmis (ACO) pour résoudre des problèmes de recherche et d'optimisation. Voici les principaux composants du projet et comment les exécuter :
+Ce projet vise à implémenter et à paralléliser un algorithme d'optimisation de colonie de fourmis (ACO) pour résoudre des problèmes de recherche et d'optimisation. Le fichier OS202_project_report.pdf contient la synthèse du travail développé avec les principaux points d'analyse et les réponses aux questions posées.
+Voici les principaux composants du projet et comment les exécuter :
 
 ### Principaux composants
 
