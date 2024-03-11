@@ -35,3 +35,19 @@ class Pheromon:
 
     def display(self, screen):
         [[screen.fill(self.getColor(i, j), (8*(j-1), 8*(i-1), 8, 8)) for j in range(1, self.pheromon.shape[1]-1)] for i in range(1, self.pheromon.shape[0]-1)]
+
+    def get_pheromone_values_for_mpi(self):
+        # Initialize an empty list to store the pheromone values
+        pheromone_values = []
+
+        # Iterate over the pheromone matrix
+        for i in range(1, self.pheromon.shape[0]-1):
+            for j in range(1, self.pheromon.shape[1]-1):
+                # Get the pheromone value at the current cell
+                pheromone_value = self.pheromon[i, j]
+
+                # Append the pheromone value to the list
+                pheromone_values.append(pheromone_value)
+
+        # Return the list of pheromone values
+        return pheromone_values

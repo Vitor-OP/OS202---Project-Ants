@@ -6,6 +6,10 @@ import maze
 import pheromone
 import direction as d
 import pygame as pg
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
 # deactivating the numpy paralelism
 import os
@@ -15,8 +19,6 @@ os.environ['MKL_NUM_THREADS'] = '1'
 UNLOADED, LOADED = False, True
 
 exploration_coefs = 0.
-
-
 
 class Colony:
     """
@@ -47,9 +49,10 @@ class Colony:
         # Direction in which the ant is currently facing (depends on the direction it came from).
         self.directions = d.DIR_NONE*np.ones(nb_ants, dtype=np.int8)
         self.sprites = []
-        img = pg.image.load("ants.png").convert_alpha()
-        for i in range(0, 32, 8):
-            self.sprites.append(pg.Surface.subsurface(img, i, 0, 8, 8))
+        if rank == 0:
+            img = pg.image.load("ants.png").convert_alpha()
+            for i in range(0, 32, 8):
+                self.sprites.append(pg.Surface.subsurface(img, i, 0, 8, 8))
 
     def return_to_nest(self, loaded_ants, pos_nest, food_counter):
         """
@@ -221,10 +224,6 @@ class Colony:
 if __name__ == "__main__":
     import sys
     import time
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    size = comm.Get_size()
     
     # All process setup
     # getting arguments (all processes)
@@ -246,18 +245,22 @@ if __name__ == "__main__":
     pos_food = size_laby[0]-1, size_laby[1]-1
     pos_nest = 0, 0
     
-    a_maze = maze.Maze(size_laby, 12345)
+    pg.init()
+    resolution = size_laby[1]*8, size_laby[0]*8
+    
+    if rank == 0:
+        screen = pg.display.set_mode(resolution)
+    else:
+        screen = pg.display.set_mode(resolution, flags=pg.HIDDEN)
+    
+    a_maze = maze.Maze(size_laby, 12345, rank)
 
     # Process 0 for display, Process 1 for ant/pheromone management
     if rank == 0:
         # Display-related tasks
-        pg.init()
         # clock = pg.time.Clock()
         snapshop_taken = False
-        
-        resolution = size_laby[1]*8, size_laby[0]*8
-        screen = pg.display.set_mode(resolution)
-        
+        mazeImg = a_maze.display()
         
         while True:
             for event in pg.event.get():
@@ -273,8 +276,9 @@ if __name__ == "__main__":
             received_data = comm.recv(source=1, tag=11)  # Receive data from process 1
             print(received_data)  # Process and display this data
             
+            screen.fill((255, 255, 255))
             screen.blit(mazeImg, (0, 0))
-            ants.display(screen)
+            # ants.display(screen)
             pg.display.update()
             
             end = time.time()
@@ -282,7 +286,7 @@ if __name__ == "__main__":
                 pg.image.save(screen, "MyFirstFood.png")
                 snapshop_taken = True
             # pg.time.wait(500)
-            print(f"FPS : {1./(end-deb):6.2f}, nourriture : {food_counter:7d}", end='\r')
+            # print(f"FPS : {1./(end-deb):6.2f}, nourriture : {food_counter:7d}", end='\r')
         
     else:
         # Ant and pheromone management tasks
@@ -296,10 +300,10 @@ if __name__ == "__main__":
             food_counter = ants.advance(a_maze, pos_food, pos_nest, pherom, food_counter)
             pherom.do_evaporation(pos_food)
             
-            ants_data = {'positions': [[1, 2], [3, 4]], 'directions': [0, 1]}  # Dummy data
+            # ants_data = {'positions': [[1.1, 2], [3, 4]], 'directions': [0, 1], 'rank': rank}  # Dummy data
+            ants_data = ants.get_ants_data_for_mpi()
             comm.send(ants_data, dest=0, tag=11)  # Send data to process 0
             
             
             
-
             # clock.tick(15)  # adjust FPS here
