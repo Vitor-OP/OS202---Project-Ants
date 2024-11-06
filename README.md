@@ -1,6 +1,8 @@
 ## Fourmi2024
 
-This project aims to implement and parallelize an Ant Colony Optimization (ACO) algorithm to solve search and optimization problems. Here are the main components of the project and how to execute them:
+This project aims to implement and parallelize an Ant Colony Optimization (ACO) algorithm to solve search and optimization problems. Here it is achived an acceleration of 2.02 by the paralization code. It was first implemented a simple paralization that separated the graphical render to the colony calculation and then one that would split the colonies for multiple cores.
+
+Here are the main components of the project and how to execute them:
 
 ### Main Components
 
