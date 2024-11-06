@@ -1,35 +1,34 @@
 ## Fourmi2024
 
-Ce projet vise à implémenter et à paralléliser un algorithme d'optimisation de colonie de fourmis (ACO) pour résoudre des problèmes de recherche et d'optimisation.
-Voici les principaux composants du projet et comment les exécuter :
+This project aims to implement and parallelize an Ant Colony Optimization (ACO) algorithm to solve search and optimization problems. Here are the main components of the project and how to execute them:
 
-### Principaux composants
+### Main Components
 
-**Rapport du Travail**
+**Work Report**
 
-Le fichier OS202_project_report.pdf contient la synthèse du travail développé avec les principaux points d'analyse et les réponses aux questions posées.
+The file OS202_project_report.pdf contains a summary of the work developed, including the main analysis points and answers to the posed questions.
    
-**Code séquentiel:**
+**Sequential Code:**
 
-Le code séquentiel est une implémentation de base de l'algorithme ACO qui s'exécute de manière sérielle. Il est utile pour comprendre le fonctionnement de l'algorithme sans tenir compte de la parallélisation.
+The sequential code is a basic implementation of the ACO algorithm that runs serially. It is useful for understanding the algorithm's functionality without considering parallelization.
 
-**Instructions d'exécution:**
+**Execution Instructions:**
 
 cd Sequentiel/
 python3 Sequential.py
 
-**Code de parallélisation des tâches:**
+**Task Parallelization Code:**
 
-Le code Task_parallel.py implémente une version parallèle de l'algorithme ACO en utilisant la parallélisation des tâches. Il divise les tâches entre deux processus pour accélérer l'exécution.
+The Task_parallel.py code implements a parallel version of the ACO algorithm using task parallelization. It splits tasks between two processes to speed up execution.
 
-**Instructions d'exécution :**
+**Execution Instructions:**
 
-mpiexec -n {nº de processus} python3 Task_parallel.py
+mpiexec -n {number of processes} python3 Task_parallel.py
 
-**Code de parallélisation de multicolonies:**
+**Multicolonies Parallelization Code:**
 
-Le code Multicolonies_parallel.py implémente une version parallèle de l'algorithme ACO en utilisant plusieurs colonies de fourmis qui fonctionnent simultanément. Cela peut améliorer la diversité de la recherche et la qualité de la solution
+The Multicolonies_parallel.py code implements a parallel version of the ACO algorithm using multiple ant colonies that operate simultaneously. This can improve search diversity and solution quality.
 
-**Instructions d'exécution:**
+**Execution Instructions:**
 
-mpiexec -n {nº de processus} python3 Multicolonies_parallel.py
+mpiexec -n {number of processes} python3 Multicolonies_parallel.py
