@@ -27,10 +27,6 @@ The Task_parallel.py code implements a parallel version of the ACO algorithm usi
 
 mpiexec -n {number of processes} python3 Task_parallel.py
 
-**Multicolonies Parallelization Code:**
-
-The Multicolonies_parallel.py code implements a parallel version of the ACO algorithm using multiple ant colonies that operate simultaneously. This can improve search diversity and solution quality.
-
 **Execution Instructions:**
 
 mpiexec -n {number of processes} python3 Multicolonies_parallel.py
